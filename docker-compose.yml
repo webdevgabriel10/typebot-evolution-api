@@ -25,43 +25,35 @@ services:
       - 'host.docker.internal:host-gateway'
     env_file: .env
 
-  typebot-viewer:
-    image: baptistearno/typebot-viewer:latest
-    restart: always
-    depends_on:
-      - typebot-db
-    ports:
-      - '8081:3000'
-    env_file: .env
-
-  evolution-api:
-    image: atendai/evolution-api
-    command: ["node", "./dist/src/main.js"]
-    container_name: evolution_api
-    restart: always
-    ports:
-      - "8082:8080"
-    environment:
-      - AUTHENTICATION_API_KEY=cBEugz5dSIaIuWO6mAivCEXZE7rPhfaG
-    volumes:
-      - evolution_store:/evolution/store
-      - evolution_instances:/evolution/instances
-    extra_hosts:
-      - 'host.docker.internal:host-gateway'
-
   nginx:
     image: nginx:latest
     depends_on:
       typebot-builder:
         condition: service_started
-      typebot-viewer:
-        condition: service_started
-      evolution-api:
-        condition: service_started
     restart: always
     ports:
       - "80:80"
+      - "443:443"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./certs:/etc/nginx/certs
+      - ./html:/usr/share/nginx/html
     command: ["nginx", "-g", "daemon off;"]
+    networks:
+      - nginx_network
+
+  certbot:
+    image: certbot/certbot
+    volumes:
+      - ./certs:/etc/letsencrypt
+      - ./html:/usr/share/nginx/html
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+    depends_on:
+      - nginx
+    networks:
+      - nginx_network
+
+networks:
+  nginx_network:
+    driver: bridge
 
